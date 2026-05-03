@@ -1,156 +1,89 @@
-import { useState, useEffect } from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import LocationHeader from "@/components/LocationHeader";
+import BottomNav from "@/components/BottomNav";
+import BookingSheet from "@/components/BookingSheet";
 import { motion } from "framer-motion";
-import { AlertTriangle, MapPin, Clock, Phone, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { useServices } from "@/hooks/useServices";
-import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 export default function EmergencyPage() {
   const { data: services, isLoading } = useServices();
   const emergencyServices = (services || []).filter((s) => s.is_emergency);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [dispatching, setDispatching] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [assigned, setAssigned] = useState(false);
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    if (dispatching && countdown > 0) {
-      const t = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(t);
-    }
-    if (dispatching && countdown === 0) {
-      setDispatching(false);
-      setAssigned(true);
-    }
-  }, [dispatching, countdown]);
-
-  const handleDispatch = async () => {
-    if (!user) { navigate("/login"); return; }
-    if (!selected) return;
-
-    const service = emergencyServices.find((s) => s.id === selected);
-    if (!service) return;
-
-    const price = Math.round(service.base_price * Number(service.surge_multiplier));
-    const { error } = await supabase.from("bookings").insert({
-      customer_id: user.id,
-      service_id: service.id,
-      estimated_price: price,
-      is_emergency: true,
-      surge_multiplier: Number(service.surge_multiplier),
-      status: "pending",
-    });
-
-    if (error) {
-      toast({ title: "Dispatch failed", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    setDispatching(true);
-    setCountdown(10);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background"><Navbar /><div className="pt-24 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></div>
-    );
-  }
+  const [selectedService, setSelectedService] = useState<any>(null);
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      <div className="pt-24 pb-16">
-        <div className="container mx-auto px-4 max-w-2xl">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emergency/10 border border-emergency/20 mb-4">
-              <AlertTriangle className="h-4 w-4 text-emergency" />
-              <span className="text-sm font-semibold text-emergency">Emergency Dispatch — Priority Queue Active</span>
-            </div>
-            <h1 className="text-3xl font-heading font-bold text-foreground mb-2">Emergency Help Now</h1>
-            <p className="text-muted-foreground">Select your emergency. We'll dispatch the nearest provider immediately.</p>
-          </motion.div>
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      <LocationHeader />
 
-          {dispatching ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-16">
-              <div className="relative inline-flex mb-6">
-                <div className="h-24 w-24 rounded-full bg-emergency/20 flex items-center justify-center animate-pulse">
-                  <div className="h-16 w-16 rounded-full bg-emergency flex items-center justify-center">
-                    <span className="text-2xl font-heading font-bold text-emergency-foreground">{countdown}</span>
+      <div className="px-4 pt-4 pb-3">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emergency/10 border border-emergency/20 mb-3">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emergency opacity-75 animate-pulse-dot" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emergency" />
+            </span>
+            <span className="text-xs font-bold text-emergency uppercase tracking-wider">Priority Dispatch</span>
+          </div>
+          <h1 className="text-2xl font-heading font-bold text-foreground">Emergency Help</h1>
+          <p className="text-sm text-muted-foreground mt-1">Tap a service. We dispatch instantly.</p>
+        </motion.div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-emergency" /></div>
+      ) : (
+        <div className="px-4 space-y-3 pb-6">
+          {emergencyServices.map((s, i) => {
+            const finalPrice = Math.round(s.base_price * Number(s.surge_multiplier));
+            return (
+              <motion.div
+                key={s.id}
+                initial={{ opacity: 0, x: -15 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.07 }}
+                onClick={() => setSelectedService(s)}
+                className="bg-card rounded-2xl border border-border p-4 shadow-card active:scale-[0.98] transition-all cursor-pointer hover:border-emergency/30"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-emergency/10 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="h-6 w-6 text-emergency" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-heading font-bold text-foreground text-[15px]">{s.name}</h3>
+                      {Number(s.surge_multiplier) > 1.3 && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-emergency/10 text-emergency text-[10px] font-bold">
+                          {s.surge_multiplier}x
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                      <Clock className="h-3 w-3" /> ~{s.avg_eta_minutes} min
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-lg font-heading font-bold text-foreground">₹{finalPrice}</p>
                   </div>
                 </div>
-              </div>
-              <h2 className="text-xl font-heading font-semibold text-foreground mb-2">Finding nearest provider...</h2>
-              <p className="text-muted-foreground mb-1">Searching within 5 km radius</p>
-              <p className="text-sm text-muted-foreground">Auto-reassigning if no response in {countdown}s</p>
-              <div className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4 text-primary" /> Detected: Connaught Place, Delhi
-              </div>
-            </motion.div>
-          ) : assigned ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-12">
-              <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-                <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-2xl text-primary-foreground">✓</span>
-                </div>
-              </div>
-              <h2 className="text-xl font-heading font-semibold text-foreground mb-2">Booking Created!</h2>
-              <p className="text-muted-foreground mb-4">Your emergency request has been logged and is awaiting provider assignment.</p>
-              <Button variant="hero" onClick={() => navigate("/services")}>Back to Services</Button>
-            </motion.div>
-          ) : (
-            <div className="grid gap-4">
-              {emergencyServices.map((s, i) => {
-                const isSelected = selected === s.id;
-                const surgePrice = Math.round(s.base_price * Number(s.surge_multiplier));
-                return (
-                  <motion.div
-                    key={s.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.08 }}
-                    onClick={() => setSelected(s.id)}
-                    className={`p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                      isSelected ? "border-emergency bg-emergency/5 shadow-lg" : "border-border bg-card hover:border-emergency/30"
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${isSelected ? "bg-emergency/20" : "bg-muted"}`}>
-                        <AlertTriangle className={`h-6 w-6 ${isSelected ? "text-emergency" : "text-muted-foreground"}`} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-heading font-semibold text-card-foreground">{s.name}</h3>
-                          {Number(s.surge_multiplier) > 1.3 && <Badge variant="destructive" className="text-xs">Surge {s.surge_multiplier}x</Badge>}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{s.description}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-foreground">₹{surgePrice}</p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" /> ~{s.avg_eta_minutes} min
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-              <Button variant="emergency" size="xl" className="mt-4 w-full" disabled={selected === null} onClick={handleDispatch}>
-                🚨 Dispatch Now
-              </Button>
-            </div>
-          )}
+              </motion.div>
+            );
+          })}
         </div>
-      </div>
-      <Footer />
+      )}
+
+      {selectedService && (
+        <BookingSheet
+          service={{
+            ...selectedService,
+            surge_multiplier: Number(selectedService.surge_multiplier),
+          }}
+          onClose={() => setSelectedService(null)}
+        />
+      )}
+
+      <BottomNav />
     </div>
   );
 }
