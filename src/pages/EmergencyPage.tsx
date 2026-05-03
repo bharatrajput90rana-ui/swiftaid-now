@@ -4,19 +4,23 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { AlertTriangle, MapPin, Clock, Phone, Fuel, Battery, Car, ShieldAlert } from "lucide-react";
-
-const emergencyServices = [
-  { id: 1, icon: Fuel, name: "Fuel Delivery", desc: "Petrol or diesel delivered to your location", price: 199, surgeMultiplier: 1.5 },
-  { id: 2, icon: Battery, name: "Battery Jump Start", desc: "Get your vehicle started instantly", price: 299, surgeMultiplier: 1.3 },
-  { id: 3, icon: Car, name: "Flat Tire Assistance", desc: "Roadside tire change or repair", price: 349, surgeMultiplier: 1.2 },
-  { id: 4, icon: ShieldAlert, name: "Urgent Home Repair", desc: "Emergency plumbing, electrical fixes", price: 499, surgeMultiplier: 1.8 },
-];
+import { AlertTriangle, MapPin, Clock, Phone, Loader2 } from "lucide-react";
+import { useServices } from "@/hooks/useServices";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export default function EmergencyPage() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const { data: services, isLoading } = useServices();
+  const emergencyServices = (services || []).filter((s) => s.is_emergency);
+  const [selected, setSelected] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [assigned, setAssigned] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (dispatching && countdown > 0) {
@@ -25,13 +29,41 @@ export default function EmergencyPage() {
     }
     if (dispatching && countdown === 0) {
       setDispatching(false);
+      setAssigned(true);
     }
   }, [dispatching, countdown]);
 
-  const handleDispatch = () => {
+  const handleDispatch = async () => {
+    if (!user) { navigate("/login"); return; }
+    if (!selected) return;
+
+    const service = emergencyServices.find((s) => s.id === selected);
+    if (!service) return;
+
+    const price = Math.round(service.base_price * Number(service.surge_multiplier));
+    const { error } = await supabase.from("bookings").insert({
+      customer_id: user.id,
+      service_id: service.id,
+      estimated_price: price,
+      is_emergency: true,
+      surge_multiplier: Number(service.surge_multiplier),
+      status: "pending",
+    });
+
+    if (error) {
+      toast({ title: "Dispatch failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
     setDispatching(true);
     setCountdown(10);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background"><Navbar /><div className="pt-24 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div></div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -55,7 +87,6 @@ export default function EmergencyPage() {
                     <span className="text-2xl font-heading font-bold text-emergency-foreground">{countdown}</span>
                   </div>
                 </div>
-                <span className="absolute -top-1 -right-1 flex h-4 w-4"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emergency opacity-75" /><span className="relative inline-flex rounded-full h-4 w-4 bg-emergency" /></span>
               </div>
               <h2 className="text-xl font-heading font-semibold text-foreground mb-2">Finding nearest provider...</h2>
               <p className="text-muted-foreground mb-1">Searching within 5 km radius</p>
@@ -64,29 +95,22 @@ export default function EmergencyPage() {
                 <MapPin className="h-4 w-4 text-primary" /> Detected: Connaught Place, Delhi
               </div>
             </motion.div>
-          ) : countdown === 0 && selected !== null ? (
+          ) : assigned ? (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-12">
               <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
                 <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-2xl">✓</span>
+                  <span className="text-2xl text-primary-foreground">✓</span>
                 </div>
               </div>
-              <h2 className="text-xl font-heading font-semibold text-foreground mb-2">Provider Assigned!</h2>
-              <p className="text-muted-foreground mb-4">Rajesh K. is on the way • ETA 8 min</p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border">
-                <Phone className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-foreground">+91 98XXX XXXXX</span>
-              </div>
-              <div className="mt-6">
-                <Button variant="hero" onClick={() => { setSelected(null); setCountdown(-1); }}>
-                  Track Live on Map
-                </Button>
-              </div>
+              <h2 className="text-xl font-heading font-semibold text-foreground mb-2">Booking Created!</h2>
+              <p className="text-muted-foreground mb-4">Your emergency request has been logged and is awaiting provider assignment.</p>
+              <Button variant="hero" onClick={() => navigate("/services")}>Back to Services</Button>
             </motion.div>
           ) : (
             <div className="grid gap-4">
               {emergencyServices.map((s, i) => {
                 const isSelected = selected === s.id;
+                const surgePrice = Math.round(s.base_price * Number(s.surge_multiplier));
                 return (
                   <motion.div
                     key={s.id}
@@ -100,32 +124,26 @@ export default function EmergencyPage() {
                   >
                     <div className="flex items-center gap-4">
                       <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${isSelected ? "bg-emergency/20" : "bg-muted"}`}>
-                        <s.icon className={`h-6 w-6 ${isSelected ? "text-emergency" : "text-muted-foreground"}`} />
+                        <AlertTriangle className={`h-6 w-6 ${isSelected ? "text-emergency" : "text-muted-foreground"}`} />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h3 className="font-heading font-semibold text-card-foreground">{s.name}</h3>
-                          {s.surgeMultiplier > 1.3 && <Badge variant="destructive" className="text-xs">Surge {s.surgeMultiplier}x</Badge>}
+                          {Number(s.surge_multiplier) > 1.3 && <Badge variant="destructive" className="text-xs">Surge {s.surge_multiplier}x</Badge>}
                         </div>
-                        <p className="text-sm text-muted-foreground">{s.desc}</p>
+                        <p className="text-sm text-muted-foreground">{s.description}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-foreground">₹{Math.round(s.price * s.surgeMultiplier)}</p>
+                        <p className="text-lg font-bold text-foreground">₹{surgePrice}</p>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" /> ~10 min
+                          <Clock className="h-3 w-3" /> ~{s.avg_eta_minutes} min
                         </div>
                       </div>
                     </div>
                   </motion.div>
                 );
               })}
-              <Button
-                variant="emergency"
-                size="xl"
-                className="mt-4 w-full"
-                disabled={selected === null}
-                onClick={handleDispatch}
-              >
+              <Button variant="emergency" size="xl" className="mt-4 w-full" disabled={selected === null} onClick={handleDispatch}>
                 🚨 Dispatch Now
               </Button>
             </div>
