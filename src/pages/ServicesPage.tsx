@@ -5,27 +5,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
-import { MapPin, Search, Star, Clock, ChevronRight } from "lucide-react";
-
-const allServices = [
-  { id: 1, name: "Plumber", category: "plumbing", rating: 4.8, price: 299, eta: "15 min", available: 12 },
-  { id: 2, name: "Electrician", category: "electrical", rating: 4.9, price: 349, eta: "12 min", available: 8 },
-  { id: 3, name: "Deep Cleaning", category: "cleaning", rating: 4.7, price: 999, eta: "30 min", available: 15 },
-  { id: 4, name: "AC Repair", category: "electrical", rating: 4.6, price: 499, eta: "20 min", available: 6 },
-  { id: 5, name: "Painter", category: "painting", rating: 4.5, price: 799, eta: "45 min", available: 4 },
-  { id: 6, name: "Carpenter", category: "plumbing", rating: 4.7, price: 449, eta: "25 min", available: 7 },
-];
+import { MapPin, Search, Star, Clock, ChevronRight, Loader2 } from "lucide-react";
+import { useServices } from "@/hooks/useServices";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const categories = ["all", "plumbing", "electrical", "cleaning", "painting"];
 
 export default function ServicesPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
+  const { data: services, isLoading } = useServices(category);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
-  const filtered = allServices.filter(
-    (s) =>
-      (category === "all" || s.category === category) &&
-      s.name.toLowerCase().includes(search.toLowerCase())
+  const handleBook = async (serviceId: string, price: number, isEmergency: boolean) => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    const { data, error } = await supabase.from("bookings").insert({
+      customer_id: user.id,
+      service_id: serviceId,
+      estimated_price: price,
+      is_emergency: isEmergency,
+      status: "pending",
+    }).select().single();
+
+    if (error) {
+      toast({ title: "Booking failed", description: error.message, variant: "destructive" });
+    } else {
+      setBookingId(data.id);
+      toast({ title: "Booking created!", description: `Order ${data.id.slice(0, 8)} is being matched with a provider.` });
+    }
+  };
+
+  const filtered = (services || []).filter(
+    (s) => s.name.toLowerCase().includes(search.toLowerCase()) && !s.is_emergency
   );
 
   return (
@@ -41,12 +61,7 @@ export default function ServicesPage() {
           <div className="flex flex-col sm:flex-row gap-3 mb-6">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search services..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="Search services..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
             </div>
             <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-muted text-sm">
               <MapPin className="h-4 w-4 text-primary" />
@@ -56,48 +71,53 @@ export default function ServicesPage() {
 
           <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
             {categories.map((c) => (
-              <Button
-                key={c}
-                variant={category === c ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCategory(c)}
-                className="capitalize whitespace-nowrap"
-              >
+              <Button key={c} variant={category === c ? "default" : "outline"} size="sm" onClick={() => setCategory(c)} className="capitalize whitespace-nowrap">
                 {c}
               </Button>
             ))}
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((service, i) => (
-              <motion.div
-                key={service.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="group p-5 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-lg transition-all cursor-pointer"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-heading font-semibold text-card-foreground">{service.name}</h3>
-                    <Badge variant="secondary" className="mt-1 capitalize">{service.category}</Badge>
+          {isLoading ? (
+            <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((service, i) => (
+                <motion.div
+                  key={service.id}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="group p-5 rounded-xl bg-card border border-border hover:border-primary/30 hover:shadow-lg transition-all"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-heading font-semibold text-card-foreground">{service.name}</h3>
+                      <Badge variant="secondary" className="mt-1 capitalize">{service.category}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-foreground">₹{service.base_price}</p>
+                      <p className="text-xs text-muted-foreground">starting</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-foreground">₹{service.price}</p>
-                    <p className="text-xs text-muted-foreground">starting</p>
+                  <p className="text-sm text-muted-foreground mb-3">{service.description}</p>
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                    <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> ~{service.avg_eta_minutes} min</span>
                   </div>
-                </div>
-                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                  <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-warning fill-warning" /> {service.rating}</span>
-                  <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {service.eta}</span>
-                  <span className="text-primary font-medium">{service.available} available</span>
-                </div>
-                <Button variant="hero" size="sm" className="w-full group-hover:shadow-glow">
-                  Book Now <ChevronRight className="h-4 w-4" />
-                </Button>
-              </motion.div>
-            ))}
-          </div>
+                  <Button
+                    variant="hero"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleBook(service.id, service.base_price, service.is_emergency)}
+                  >
+                    Book Now <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </motion.div>
+              ))}
+              {filtered.length === 0 && (
+                <p className="col-span-full text-center text-muted-foreground py-12">No services found.</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <Footer />

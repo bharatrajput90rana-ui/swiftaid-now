@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Zap, Menu, X } from "lucide-react";
+import { Zap, Menu, X, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navLinks = [
   { to: "/services", label: "Services" },
@@ -14,6 +15,13 @@ const navLinks = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50">
@@ -43,8 +51,17 @@ export default function Navbar() {
         </div>
 
         <div className="hidden md:flex items-center gap-2">
-          <Link to="/login"><Button variant="ghost" size="sm">Log in</Button></Link>
-          <Link to="/signup"><Button variant="hero" size="sm">Sign up</Button></Link>
+          {user ? (
+            <>
+              <span className="text-sm text-muted-foreground truncate max-w-[150px]">{user.email}</span>
+              <Button variant="ghost" size="sm" onClick={handleSignOut}><LogOut className="h-4 w-4" /></Button>
+            </>
+          ) : (
+            <>
+              <Link to="/login"><Button variant="ghost" size="sm">Log in</Button></Link>
+              <Link to="/signup"><Button variant="hero" size="sm">Sign up</Button></Link>
+            </>
+          )}
         </div>
 
         <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setOpen(!open)}>
@@ -67,8 +84,14 @@ export default function Navbar() {
                 </Link>
               ))}
               <div className="flex gap-2 pt-2 border-t border-border">
-                <Link to="/login" className="flex-1"><Button variant="outline" className="w-full">Log in</Button></Link>
-                <Link to="/signup" className="flex-1"><Button variant="hero" className="w-full">Sign up</Button></Link>
+                {user ? (
+                  <Button variant="outline" className="w-full" onClick={handleSignOut}>Sign out</Button>
+                ) : (
+                  <>
+                    <Link to="/login" className="flex-1"><Button variant="outline" className="w-full">Log in</Button></Link>
+                    <Link to="/signup" className="flex-1"><Button variant="hero" className="w-full">Sign up</Button></Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
