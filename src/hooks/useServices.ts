@@ -7,7 +7,7 @@ export function useServices(category?: string) {
     queryFn: async () => {
       let query = supabase.from("services").select("*").eq("is_active", true);
       if (category && category !== "all") {
-        query = query.eq("category", category);
+        query = query.eq("category", category as any);
       }
       const { data, error } = await query.order("is_emergency", { ascending: false });
       if (error) throw error;
